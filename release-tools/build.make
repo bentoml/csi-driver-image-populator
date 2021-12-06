@@ -20,7 +20,7 @@
 
 # This is the default. It can be overridden in the main Makefile after
 # including build.make.
-REGISTRY_NAME=quay.io/k8scsi
+REGISTRY_NAME=quay.io/bentoml
 
 # Revision that gets built into each binary via the main.version
 # string. Uses the `git describe` output based on the most recent
@@ -33,7 +33,7 @@ REV=$(shell git describe --long --tags --match='v*' --dirty 2>/dev/null || git r
 
 # A space-separated list of image tags under which the current build is to be pushed.
 # Determined dynamically.
-IMAGE_TAGS=
+IMAGE_TAGS=latest
 
 # A "canary" image gets built if the current commit is the head of the remote "master" branch.
 # That branch does not exist when building some other branch in TravisCI.
