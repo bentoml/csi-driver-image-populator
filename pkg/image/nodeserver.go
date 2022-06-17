@@ -197,6 +197,7 @@ func (ns *nodeServer) setupVolume(ctx context.Context, volumeId string, image st
 			glog.Errorf("Failed to get kube client: %v", err)
 			return err
 		}
+		glog.V(4).Infof("Getting secret %s/%s", secretNamespace, secretName)
 		secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(ctx, secretName, metav1.GetOptions{})
 		if err != nil {
 			glog.Errorf("Failed to get secret %s/%s: %v", secretNamespace, secretName, err)
