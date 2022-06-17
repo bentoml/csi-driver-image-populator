@@ -17,6 +17,7 @@ limitations under the License.
 package image
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +26,11 @@ import (
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/kubernetes/pkg/credentialprovider"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
@@ -62,10 +68,10 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
-	image := req.GetVolumeContext()["image"]
-	tlsVerify := req.GetVolumeContext()["tlsVerify"] != "false"
+	volumeContext := req.GetVolumeContext()
+	image := volumeContext["image"]
 
-	err := ns.setupVolume(req.GetVolumeId(), image, tlsVerify)
+	err := ns.setupVolume(ctx, req.GetVolumeId(), image, volumeContext)
 	if err != nil {
 		return nil, err
 	}
@@ -149,9 +155,67 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (ns *nodeServer) setupVolume(volumeId string, image string, tlsVerify bool) error {
+func parseDockerConfigFromSecretData(data map[string][]byte) (credentialprovider.DockerConfig, error) {
+	if dockerConfigJSONBytes, existed := data[corev1.DockerConfigJsonKey]; existed {
+		if len(dockerConfigJSONBytes) > 0 {
+			dockerConfigJSON := credentialprovider.DockerConfigJson{}
+			if err := json.Unmarshal(dockerConfigJSONBytes, &dockerConfigJSON); err != nil {
+				return nil, err
+			}
 
-	args := []string{"from", fmt.Sprintf("--tls-verify=%v", tlsVerify), "--name", volumeId, "--pull", image}
+			return dockerConfigJSON.Auths, nil
+		}
+	}
+
+	if dockercfgBytes, existed := data[corev1.DockerConfigKey]; existed {
+		if len(dockercfgBytes) > 0 {
+			dockercfg := credentialprovider.DockerConfig{}
+			if err := json.Unmarshal(dockercfgBytes, &dockercfg); err != nil {
+				return nil, err
+			}
+			return dockercfg, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (ns *nodeServer) setupVolume(ctx context.Context, volumeId string, image string, volumeContext map[string]string) error {
+	tlsVerify := volumeContext["tlsVerify"] != "false"
+
+	args := []string{"from", fmt.Sprintf("--tls-verify=%v", tlsVerify), "--name", volumeId, "--pull"}
+	secretName := volumeContext["secret"]
+	secretNamespace := volumeContext["secretNamespace"]
+	if secretName != "" && secretNamespace != "" {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			glog.Errorf("Failed to get kube config: %v", err)
+			return err
+		}
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			glog.Errorf("Failed to get kube client: %v", err)
+			return err
+		}
+		secret, err := clientset.CoreV1().Secrets(secretNamespace).Get(ctx, secretName, metav1.GetOptions{})
+		if err != nil {
+			glog.Errorf("Failed to get secret %s/%s: %v", secretNamespace, secretName, err)
+			return err
+		}
+		cred, err := parseDockerConfigFromSecretData(secret.Data)
+		if err != nil {
+			glog.Errorf("Failed to parse secret %s/%s: %v", secretNamespace, secretName, err)
+			return err
+		}
+		basicKeyring := &credentialprovider.BasicDockerKeyring{}
+		basicKeyring.Add(cred)
+		dockerKeyring := credentialprovider.UnionDockerKeyring{basicKeyring}
+		creds, withCredentials := dockerKeyring.Lookup(image)
+		if withCredentials && len(creds) > 0 {
+			args = append(args, "--creds", fmt.Sprintf("%s:%s", creds[0].Username, creds[0].Password))
+		}
+	}
+	args = append(args, image)
 	ns.execPath = "/bin/buildah" // FIXME
 	output, err := ns.runCmd(args)
 	// FIXME handle failure.
