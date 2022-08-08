@@ -23,10 +23,6 @@ In the future, integration with CRI would be desirable so the driver could ask v
 
 ## Usage:
 
-**This is a prototype driver. Do not use for production**
-
-It also requires features that are still in development.
-
 ### Build imageplugin
 ```
 $ make image
