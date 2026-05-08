@@ -7,7 +7,7 @@ require (
 	github.com/docker/docker v20.10.17+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+	github.com/golang/glog v1.2.4
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/kubernetes-csi/drivers v1.0.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
