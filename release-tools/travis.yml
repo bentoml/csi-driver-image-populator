@@ -4,7 +4,7 @@ services:
   - docker
 matrix:
   include:
-  - go: 1.11.1
+  - go: 1.24.0
 script:
 - make -k all test
 after_success:
