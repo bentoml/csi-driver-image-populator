@@ -1,6 +1,6 @@
 module github.com/kubernetes-csi/csi-driver-image-populator
 
-go 1.24.0
+go 1.26.10
 
 require (
 	github.com/container-storage-interface/spec v1.0.0
